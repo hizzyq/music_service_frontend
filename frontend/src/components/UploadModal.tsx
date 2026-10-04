@@ -1,196 +1,266 @@
 import React, { useState, useRef } from 'react';
 import { adminApi } from '../api/admin';
 import { usePlayerStore } from '../store/usePlayerStore';
-import { UploadCloud, CheckCircle2, AlertCircle, Loader2, X, Music } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertCircle, Loader2, X, Music, Trash2 } from 'lucide-react';
 
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type UploadStatus = 'idle' | 'presigning' | 'uploading' | 'processing' | 'success' | 'error';
+interface UploadFileItem {
+  id: string;
+  file: File;
+  status: 'idle' | 'presigning' | 'uploading' | 'processing' | 'success' | 'error';
+  progress: number;
+  errorMessage?: string;
+}
 
 export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose }) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<UploadStatus>('idle');
-  const [progress, setProgress] = useState(0);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [items, setItems] = useState<UploadFileItem[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchTracks = usePlayerStore((state) => state.fetchTracks);
 
   if (!isOpen) return null;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-      setStatus('idle');
-      setProgress(0);
-      setErrorMessage(null);
-    }
+  const handleFilesSelected = (selectedFiles: FileList | null) => {
+    if (!selectedFiles || selectedFiles.length === 0) return;
+
+    const newItems: UploadFileItem[] = Array.from(selectedFiles).map((file) => ({
+      id: `${file.name}-${file.size}-${Math.random()}`,
+      file,
+      status: 'idle',
+      progress: 0,
+    }));
+
+    setItems((prev) => [...prev, ...newItems]);
   };
 
-  const handleUpload = async () => {
-    if (!file) return;
+  const handleRemoveItem = (id: string) => {
+    if (isUploading) return;
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  };
 
-    try {
-      setErrorMessage(null);
+  const startBatchUpload = async () => {
+    if (items.length === 0 || isUploading) return;
 
-      // Шаг 1: Получаем Presigned URL
-      setStatus('presigning');
-      const { upload_url, file_key } = await adminApi.presignUpload(file.name); //
+    setIsUploading(true);
 
-      // Шаг 2: Загружаем файл напрямую в MinIO
-      setStatus('uploading');
-      await adminApi.uploadToMinIO(upload_url, file, (pct) => setProgress(pct)); //
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.status === 'success') continue;
 
-      // Шаг 3: Сообщаем Rails о необходимости извлечь ID3-теги
-      setStatus('processing');
-      await adminApi.processUpload(file_key); //
-
-      setStatus('success');
-      // Обновляем список треков в фоновом режиме
-      await fetchTracks();
-
-      // Закрываем окно через секунду после успеха
-      setTimeout(() => {
-        handleClose();
-      }, 1500);
-    } catch (err: any) {
-      console.error(err);
-      setStatus('error');
-      setErrorMessage(
-        err.response?.data?.error || 'Произошла ошибка при загрузке аудиофайла.'
+      // 1. Presigning
+      setItems((prev) =>
+        prev.map((it) => (it.id === item.id ? { ...it, status: 'presigning', progress: 10 } : it))
       );
+
+      try {
+        const { upload_url, file_key, content_type } = await adminApi.presignUpload(item.file.name);
+
+        // 2. Direct upload to MinIO
+        setItems((prev) =>
+          prev.map((it) => (it.id === item.id ? { ...it, status: 'uploading', progress: 20 } : it))
+        );
+
+        await adminApi.uploadToMinIO(
+          upload_url,
+          item.file,
+          (pct) => {
+            setItems((prev) =>
+              prev.map((it) => (it.id === item.id ? { ...it, progress: Math.max(20, Math.round(pct * 0.8)) } : it))
+            );
+          },
+          content_type
+        );
+
+        // 3. Process metadata & waveform in Rails
+        setItems((prev) =>
+          prev.map((it) => (it.id === item.id ? { ...it, status: 'processing', progress: 90 } : it))
+        );
+
+        await adminApi.processUpload(file_key);
+
+        setItems((prev) =>
+          prev.map((it) => (it.id === item.id ? { ...it, status: 'success', progress: 100 } : it))
+        );
+      } catch (err: any) {
+        console.error('Ошибка при загрузке файла', item.file.name, err);
+        const msg = err.response?.data?.error || 'Ошибка загрузки';
+        setItems((prev) =>
+          prev.map((it) => (it.id === item.id ? { ...it, status: 'error', errorMessage: msg } : it))
+        );
+      }
     }
+
+    setIsUploading(false);
+    await fetchTracks();
   };
 
   const handleClose = () => {
-    setFile(null);
-    setStatus('idle');
-    setProgress(0);
-    setErrorMessage(null);
+    if (isUploading) return;
+    setItems([]);
     onClose();
   };
 
+  const allSuccess = items.length > 0 && items.every((it) => it.status === 'success');
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl relative">
-        
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+      <div className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl relative max-h-[85vh] flex flex-col">
         {/* Кнопка закрытия */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
+          disabled={isUploading}
+          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-100 transition-colors disabled:opacity-30 cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
         <h3 className="text-xl font-bold text-zinc-100 mb-1 flex items-center gap-2">
           <UploadCloud className="w-5 h-5 text-emerald-400" />
-          Загрузка трека (Direct to S3)
+          Массовая загрузка треков (Direct to S3)
         </h3>
-        <p className="text-xs text-zinc-400 mb-6">
-          Файл загружается напрямую в MinIO, а Rails автоматически распознает ID3-теги.
+        <p className="text-xs text-zinc-400 mb-4">
+          Поддерживаются MP3, FLAC, M4A, AAC, WAV. Метаданные, обложки и форма волны извлекаются автоматически.
         </p>
 
-        {/* Ошибка */}
-        {errorMessage && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 text-xs">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
-
-        {/* Зона выбора файла */}
+        {/* Скрытый input с флагом multiple */}
         <input
           ref={fileInputRef}
           type="file"
-          accept="audio/mp3,audio/mpeg"
-          onChange={handleFileChange}
+          multiple
+          accept="audio/*,.mp3,.flac,.m4a,.aac,.wav,.ogg"
+          onChange={(e) => handleFilesSelected(e.target.files)}
           className="hidden"
         />
 
-        {!file ? (
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-zinc-700 hover:border-emerald-500/50 hover:bg-zinc-800/40 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors"
-          >
-            <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400">
-              <Music className="w-6 h-6" />
-            </div>
-            <div className="text-center">
-              <span className="text-sm font-medium text-emerald-400">Выберите MP3-файл</span>
-              <p className="text-xs text-zinc-500 mt-1">Поддерживаются аудиофайлы с ID3v1 / ID3v2 тегами</p>
-            </div>
+        {/* Зона Drag & Drop / выбора файлов */}
+        <div
+          onClick={() => !isUploading && fileInputRef.current?.click()}
+          className="border-2 border-dashed border-zinc-700 hover:border-emerald-500/50 hover:bg-zinc-800/40 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors shrink-0 mb-4"
+        >
+          <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400">
+            <Music className="w-5 h-5 text-emerald-400" />
           </div>
-        ) : (
-          <div className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <Music className="w-6 h-6 text-emerald-400 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-zinc-100 truncate">{file.name}</div>
-                <div className="text-xs text-zinc-500">{(file.size / (1024 * 1024)).toFixed(2)} MB</div>
-              </div>
-            </div>
-            {status === 'idle' && (
-              <button
-                onClick={() => setFile(null)}
-                className="text-xs text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
+          <div className="text-center">
+            <span className="text-xs font-semibold text-emerald-400">
+              Выберите один или несколько файлов (MP3, FLAC, M4A)
+            </span>
+            <p className="text-[11px] text-zinc-500 mt-0.5">или перетащите их в это окно</p>
+          </div>
+        </div>
+
+        {/* Список выбранных файлов */}
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[120px] max-h-[260px]">
+          {items.length === 0 ? (
+            <div className="text-center py-8 text-zinc-500 text-xs">Файлы пока не выбраны</div>
+          ) : (
+            items.map((it) => (
+              <div
+                key={it.id}
+                className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3 flex flex-col gap-1.5"
               >
-                Изменить
+                <div className="flex items-center justify-between min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Music className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-xs font-medium text-zinc-100 truncate">{it.file.name}</span>
+                    <span className="text-[10px] text-zinc-500 shrink-0">
+                      ({(it.file.size / (1024 * 1024)).toFixed(1)} MB)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {it.status === 'idle' && (
+                      <button
+                        onClick={() => handleRemoveItem(it.id)}
+                        disabled={isUploading}
+                        className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer disabled:opacity-30"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {it.status === 'presigning' && (
+                      <span className="text-[11px] text-zinc-400 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin text-emerald-400" />
+                        Подпись S3...
+                      </span>
+                    )}
+                    {it.status === 'uploading' && (
+                      <span className="text-[11px] text-emerald-400 font-mono">
+                        {it.progress}%
+                      </span>
+                    )}
+                    {it.status === 'processing' && (
+                      <span className="text-[11px] text-amber-400 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Теги и волна...
+                      </span>
+                    )}
+                    {it.status === 'success' && (
+                      <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-semibold">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Готово
+                      </span>
+                    )}
+                    {it.status === 'error' && (
+                      <span className="text-[11px] text-red-400 flex items-center gap-1 font-semibold">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        Ошибка
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Прогресс-бар для активных файлов */}
+                {(it.status === 'uploading' || it.status === 'processing') && (
+                  <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full transition-all duration-150"
+                      style={{ width: `${it.progress}%` }}
+                    />
+                  </div>
+                )}
+
+                {it.status === 'error' && it.errorMessage && (
+                  <div className="text-[10px] text-red-400">{it.errorMessage}</div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Подвал с кнопками */}
+        <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between">
+          <span className="text-xs text-zinc-400">
+            {items.length > 0 && `Выбрано: ${items.length} ${items.length === 1 ? 'трек' : 'треков'}`}
+          </span>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleClose}
+              disabled={isUploading}
+              className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors disabled:opacity-40 cursor-pointer"
+            >
+              {allSuccess ? 'Закрыть' : 'Отмена'}
+            </button>
+
+            {items.length > 0 && !allSuccess && (
+              <button
+                onClick={startBatchUpload}
+                disabled={isUploading}
+                className="px-5 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-2"
+              >
+                {isUploading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>
+                  {isUploading ? 'Загрузка...' : `Загрузить все (${items.filter((it) => it.status !== 'success').length})`}
+                </span>
               </button>
             )}
           </div>
-        )}
-
-        {/* Прогресс и этапы загрузки */}
-        {status !== 'idle' && status !== 'error' && (
-          <div className="mt-5 space-y-2">
-            <div className="flex justify-between text-xs text-zinc-400">
-              <span className="flex items-center gap-2">
-                {status === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                )}
-                {status === 'presigning' && 'Генерация подписи S3...'}
-                {status === 'uploading' && `Загрузка в MinIO: ${progress}%`}
-                {status === 'processing' && 'Rails извлекает ID3-теги и создает записи...'}
-                {status === 'success' && 'Трек успешно добавлен в каталог!'}
-              </span>
-              <span className="font-mono">{progress}%</span>
-            </div>
-
-            <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-emerald-500 h-full transition-all duration-200"
-                style={{ width: `${status === 'processing' || status === 'success' ? 100 : progress}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Кнопка действия */}
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            onClick={handleClose}
-            disabled={status === 'uploading' || status === 'processing'}
-            className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors disabled:opacity-50 cursor-pointer"
-          >
-            Отмена
-          </button>
-          <button
-            onClick={handleUpload}
-            disabled={!file || status === 'uploading' || status === 'processing' || status === 'success'}
-            className="px-5 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
-          >
-            {(status === 'uploading' || status === 'processing') && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            )}
-            <span>Загрузить</span>
-          </button>
         </div>
-
       </div>
     </div>
   );

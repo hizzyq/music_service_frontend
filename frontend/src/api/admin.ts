@@ -4,6 +4,7 @@ import { api } from './client';
 export interface PresignResponse {
   upload_url: string;
   file_key: string;
+  content_type?: string;
 }
 
 export interface ProcessResponse {
@@ -15,7 +16,8 @@ export interface ProcessResponse {
     album: string;
     duration: number;
     file_key: string;
-    stream_url: string;
+    cover_url?: string;
+    waveform?: number[];
   };
 }
 
@@ -24,19 +26,20 @@ export const adminApi = {
   presignUpload: async (filename: string): Promise<PresignResponse> => {
     const res = await api.post<PresignResponse>('/admin/tracks/presign_upload', {
       filename,
-    }); //
+    });
     return res.data;
   },
 
-  // 2. Прямая загрузка байтов в бакет MinIO
+  // 2. Прямая загрузка байтов в бакет MinIO (поддержка MP3, FLAC, M4A и т.д.)
   uploadToMinIO: async (
     uploadUrl: string,
     file: File,
-    onProgress?: (percent: number) => void
+    onProgress?: (percent: number) => void,
+    contentType?: string
   ): Promise<void> => {
-    await axios.put(uploadUrl, file, { //[cite: 1]
+    await axios.put(uploadUrl, file, {
       headers: {
-        'Content-Type': 'audio/mpeg',
+        'Content-Type': contentType || file.type || 'audio/mpeg',
       },
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
@@ -51,7 +54,12 @@ export const adminApi = {
   processUpload: async (fileKey: string): Promise<ProcessResponse> => {
     const res = await api.post<ProcessResponse>('/admin/tracks/process_upload', {
       file_key: fileKey,
-    }); //[cite: 1]
+    });
     return res.data;
+  },
+
+  // 4. Удаление трека из библиотеки и бакета MinIO
+  deleteTrack: async (trackId: number): Promise<void> => {
+    await api.delete(`/admin/tracks/${trackId}`);
   },
 };

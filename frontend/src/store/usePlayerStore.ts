@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { type Track, tracksApi } from '../api/tracks';
+import { historyApi } from '../api/history';
 
 interface PlayerState {
     tracks: Track[];
@@ -79,9 +80,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
             try {
                 const streamUrl = await tracksApi.getStreamUrl(track.id); //
-                audio.src = streamUrl; //
+                audio.src = streamUrl;
                 await audio.play();
                 set({ isPlaying: true, isLoadingStream: false });
+                historyApi.record(track.id);
             } catch (err) {
                 console.error('Ошибка воспроизведения потока:', err);
                 set({ isPlaying: false, isLoadingStream: false });

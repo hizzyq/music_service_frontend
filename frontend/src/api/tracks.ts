@@ -7,6 +7,8 @@ export interface Track {
   track_number: number;
   artist: string | null;
   album: string | null;
+  cover_url?: string | null;
+  waveform?: number[];
   stream_url?: string;
 }
 

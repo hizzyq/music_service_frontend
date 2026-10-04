@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { usePlayerStore } from '../store/usePlayerStore';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music } from 'lucide-react';
+import { favoritesApi } from '../api/favorites';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, Heart } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 
 export const PlayerBar: React.FC = () => {
@@ -18,32 +19,88 @@ export const PlayerBar: React.FC = () => {
     playPrev,
   } = usePlayerStore();
 
+  const [isFavorite, setIsFavorite] = useState(false);
+  const waveformRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!currentTrack) return;
+    favoritesApi.getIds().then((ids) => {
+      setIsFavorite(ids.includes(currentTrack.id));
+    }).catch(() => {});
+  }, [currentTrack]);
+
+  const handleToggleFavorite = async () => {
+    if (!currentTrack) return;
+    try {
+      const res = await favoritesApi.toggle(currentTrack.id);
+      setIsFavorite(res.favorited);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   if (!currentTrack) return null;
 
+  const totalDuration = duration || currentTrack.duration || 100;
+  const progressRatio = Math.min(1, Math.max(0, currentTime / (totalDuration || 1)));
+
+  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!waveformRef.current) return;
+    const rect = waveformRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickRatio = Math.min(1, Math.max(0, clickX / rect.width));
+    seek(clickRatio * totalDuration);
+  };
+
   return (
-    <footer className="h-24 bg-zinc-900 border-t border-zinc-800 px-6 grid grid-cols-[1fr_2fr_1fr] items-center gap-4 fixed bottom-0 left-0 right-0 z-50">
+    <footer className="h-28 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800 px-6 grid grid-cols-[1fr_2.5fr_1fr] items-center gap-6 fixed bottom-0 left-0 right-0 z-50 shadow-2xl">
       
-      {/* Информация о текущем треке */}
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-12 h-12 bg-zinc-800 rounded-lg flex items-center justify-center shrink-0 border border-zinc-700/50">
-          <Music className="w-6 h-6 text-zinc-400" />
-        </div>
+      {/* Информация о текущем треке с обложкой и кнопкой Избранного */}
+      <div className="flex items-center gap-3.5 min-w-0">
+        {currentTrack.cover_url ? (
+          <img
+            src={currentTrack.cover_url}
+            alt={currentTrack.title}
+            className="w-14 h-14 rounded-xl object-cover shrink-0 border border-zinc-700/60 shadow-lg shadow-black/40"
+          />
+        ) : (
+          <div className="w-14 h-14 bg-zinc-800/80 rounded-xl flex items-center justify-center shrink-0 border border-zinc-700/50 shadow-inner">
+            <Music className="w-6 h-6 text-zinc-400" />
+          </div>
+        )}
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-zinc-100 truncate">
+          <div className="text-sm font-semibold text-zinc-100 truncate tracking-tight">
             {currentTrack.title}
           </div>
-          <div className="text-xs text-zinc-400 truncate">
+          <div className="text-xs text-zinc-400 truncate mt-0.5">
             {currentTrack.artist || 'Неизвестный исполнитель'}
           </div>
+          {currentTrack.album && (
+            <div className="text-[10px] text-zinc-500 truncate mt-0.5 font-medium">
+              {currentTrack.album}
+            </div>
+          )}
         </div>
+
+        {/* Кнопка "В избранное" */}
+        <button
+          onClick={handleToggleFavorite}
+          className={`p-2 rounded-xl transition-transform active:scale-90 cursor-pointer ${
+            isFavorite ? 'text-rose-500' : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+          title={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
+        >
+          <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+        </button>
       </div>
 
-      {/* Органы управления воспроизведением */}
-      <div className="flex flex-col items-center gap-2 max-w-xl w-full mx-auto">
+      {/* Органы управления воспроизведением и интерактивная звуковая волна */}
+      <div className="flex flex-col items-center gap-2 max-w-2xl w-full mx-auto">
         <div className="flex items-center gap-4">
           <button
             onClick={playPrev}
-            className="text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
+            className="text-zinc-400 hover:text-zinc-100 transition-transform active:scale-95 cursor-pointer"
+            title="Предыдущий трек"
           >
             <SkipBack className="w-5 h-5 fill-current" />
           </button>
@@ -51,7 +108,8 @@ export const PlayerBar: React.FC = () => {
           <button
             onClick={togglePlay}
             disabled={isLoadingStream}
-            className="w-10 h-10 rounded-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
+            className="w-10 h-10 rounded-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 flex items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+            title={isPlaying ? 'Пауза' : 'Воспроизведение'}
           >
             {isPlaying ? (
               <Pause className="w-5 h-5 fill-current" />
@@ -62,24 +120,60 @@ export const PlayerBar: React.FC = () => {
 
           <button
             onClick={playNext}
-            className="text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
+            className="text-zinc-400 hover:text-zinc-100 transition-transform active:scale-95 cursor-pointer"
+            title="Следующий трек"
           >
             <SkipForward className="w-5 h-5 fill-current" />
           </button>
         </div>
 
-        {/* Скраббер таймлайна */}
-        <div className="w-full flex items-center gap-3 text-xs font-mono text-zinc-400">
-          <span>{formatTime(currentTime)}</span>
-          <input
-            type="range"
-            min={0}
-            max={duration || currentTrack.duration || 100}
-            value={currentTime}
-            onChange={(e) => seek(Number(e.target.value))}
-            className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-          />
-          <span>{formatTime(duration || currentTrack.duration)}</span>
+        {/* Интерактивный Waveform с таймлайном */}
+        <div className="w-full flex items-center gap-3">
+          <span className="text-xs font-mono text-zinc-400 min-w-[42px] text-right">
+            {formatTime(currentTime)}
+          </span>
+
+          <div
+            ref={waveformRef}
+            onClick={handleWaveformClick}
+            className="flex-1 h-10 flex items-center gap-[2px] cursor-pointer group px-2 py-1 rounded-xl bg-zinc-950/40 hover:bg-zinc-800/50 border border-zinc-800/40 transition-colors"
+            title="Кликните на звуковую волну для перемотки"
+          >
+            {currentTrack.waveform && currentTrack.waveform.length > 0 ? (
+              currentTrack.waveform.map((peak, idx) => {
+                const barRatio = idx / currentTrack.waveform!.length;
+                const isPlayed = barRatio <= progressRatio;
+                // Нормализация высоты бара от 4px до 32px
+                const heightPx = Math.max(4, Math.round(peak * 32));
+
+                return (
+                  <div
+                    key={idx}
+                    className={`flex-1 rounded-full transition-colors ${
+                      isPlayed
+                        ? 'bg-emerald-400 group-hover:bg-emerald-300 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
+                        : 'bg-zinc-700/90 group-hover:bg-zinc-600'
+                    }`}
+                    style={{ height: `${heightPx}px` }}
+                  />
+                );
+              })
+            ) : (
+              // Фоллбэк: стандартный ползунок если волна еще не рассчитана
+              <input
+                type="range"
+                min={0}
+                max={totalDuration}
+                value={currentTime}
+                onChange={(e) => seek(Number(e.target.value))}
+                className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              />
+            )}
+          </div>
+
+          <span className="text-xs font-mono text-zinc-400 min-w-[42px]">
+            {formatTime(totalDuration)}
+          </span>
         </div>
       </div>
 
@@ -87,7 +181,7 @@ export const PlayerBar: React.FC = () => {
       <div className="flex items-center justify-end gap-3 text-zinc-400">
         <button
           onClick={() => setVolume(volume === 0 ? 1 : 0)}
-          className="hover:text-zinc-100 cursor-pointer"
+          className="hover:text-zinc-100 transition-colors cursor-pointer"
         >
           {volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
         </button>
@@ -98,7 +192,7 @@ export const PlayerBar: React.FC = () => {
           step={0.01}
           value={volume}
           onChange={(e) => setVolume(Number(e.target.value))}
-          className="w-24 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+          className="w-24 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
         />
       </div>
     </footer>
