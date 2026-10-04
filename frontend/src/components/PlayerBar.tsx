@@ -1,6 +1,6 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { usePlayerStore } from '../store/usePlayerStore';
-import { favoritesApi } from '../api/favorites';
+import { useFavoritesStore } from '../store/useFavoritesStore';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, Heart } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 
@@ -19,27 +19,17 @@ export const PlayerBar: React.FC = () => {
     playPrev,
   } = usePlayerStore();
 
-  const [isFavorite, setIsFavorite] = useState(false);
+  const { isFavorite, toggleFavorite } = useFavoritesStore();
   const waveformRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!currentTrack) return;
-    favoritesApi.getIds().then((ids) => {
-      setIsFavorite(ids.includes(currentTrack.id));
-    }).catch(() => {});
-  }, [currentTrack]);
+  if (!currentTrack) return null;
+
+  const isFav = isFavorite(currentTrack.id);
 
   const handleToggleFavorite = async () => {
     if (!currentTrack) return;
-    try {
-      const res = await favoritesApi.toggle(currentTrack.id);
-      setIsFavorite(res.favorited);
-    } catch (err) {
-      console.error(err);
-    }
+    await toggleFavorite(currentTrack.id);
   };
-
-  if (!currentTrack) return null;
 
   const totalDuration = duration || currentTrack.duration || 100;
   const progressRatio = Math.min(1, Math.max(0, currentTime / (totalDuration || 1)));
@@ -86,11 +76,11 @@ export const PlayerBar: React.FC = () => {
         <button
           onClick={handleToggleFavorite}
           className={`p-2 rounded-xl transition-transform active:scale-90 cursor-pointer ${
-            isFavorite ? 'text-rose-500' : 'text-zinc-500 hover:text-zinc-300'
+            isFav ? 'text-rose-500' : 'text-zinc-500 hover:text-zinc-300'
           }`}
-          title={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
+          title={isFav ? 'Удалить из избранного' : 'Добавить в избранное'}
         >
-          <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+          <Heart className={`w-5 h-5 ${isFav ? 'fill-current' : ''}`} />
         </button>
       </div>
 

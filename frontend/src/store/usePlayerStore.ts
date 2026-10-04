@@ -23,7 +23,11 @@ interface PlayerState {
     playPrev: () => void;
 }
 
+const savedVol = typeof window !== 'undefined' ? localStorage.getItem('music_player_volume') : null;
+const initialVolume = savedVol !== null ? Math.min(1, Math.max(0, parseFloat(savedVol))) : 0.6;
+
 const audio = new Audio();
+audio.volume = initialVolume;
 
 export const usePlayerStore = create<PlayerState>((set, get) => {
     audio.ontimeupdate = () => {
@@ -45,7 +49,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         isPlaying: false,
         currentTime: 0,
         duration: 0,
-        volume: 1,
+        volume: initialVolume,
         queue: [],
         isLoadingStream: false,
 
@@ -110,6 +114,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
         setVolume: (volume) => {
             audio.volume = volume;
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('music_player_volume', volume.toString());
+            }
             set({ volume });
         },
 

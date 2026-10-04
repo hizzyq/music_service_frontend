@@ -1,33 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { playlistsApi, type PlaylistSummary, type PlaylistDetail } from '../api/playlists';
+import React, { useState, useEffect } from 'react';
+import { playlistsApi, type PlaylistDetail } from '../api/playlists';
+import { usePlaylistsStore } from '../store/usePlaylistsStore';
 import { usePlayerStore } from '../store/usePlayerStore';
-import { ListMusic, Plus, Trash2, ArrowLeft, Play, Disc3 } from 'lucide-react';
+import { useFavoritesStore } from '../store/useFavoritesStore';
+import { ListMusic, Plus, Trash2, ArrowLeft, Play, Disc3, Heart } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 
 export const PlaylistsView: React.FC = () => {
-  const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
+  const { playlists, isLoading, fetchPlaylists, createPlaylist, deletePlaylist } = usePlaylistsStore();
+  const { favoriteIds, loadFavorites } = useFavoritesStore();
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
   const { playTrack, currentTrack, isPlaying } = usePlayerStore();
 
-  const loadPlaylists = async () => {
-    setIsLoading(true);
-    try {
-      const data = await playlistsApi.getAll();
-      setPlaylists(data);
-    } catch (err) {
-      console.error('Ошибка загрузки плейлистов:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadPlaylists();
-  }, []);
+    fetchPlaylists();
+    loadFavorites();
+  }, [fetchPlaylists, loadFavorites]);
 
   const openPlaylist = async (id: number) => {
     try {
@@ -42,10 +33,9 @@ export const PlaylistsView: React.FC = () => {
     e.preventDefault();
     if (!newPlaylistName.trim()) return;
     try {
-      await playlistsApi.create(newPlaylistName.trim());
+      await createPlaylist(newPlaylistName.trim());
       setNewPlaylistName('');
       setIsCreating(false);
-      loadPlaylists();
     } catch (err) {
       console.error('Ошибка создания плейлиста:', err);
     }
@@ -54,11 +44,10 @@ export const PlaylistsView: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (!confirm('Удалить плейлист?')) return;
     try {
-      await playlistsApi.delete(id);
+      await deletePlaylist(id);
       if (selectedPlaylist?.id === id) {
         setSelectedPlaylist(null);
       }
-      loadPlaylists();
     } catch (err) {
       console.error('Ошибка удаления плейлиста:', err);
     }
@@ -170,17 +159,21 @@ export const PlaylistsView: React.FC = () => {
 
   return (
     <div className="flex-1 overflow-y-auto px-8 py-6">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-800/80">
         <div>
-          <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">Мои плейлисты</h2>
-          <p className="text-xs text-zinc-400 mt-1">Коллекции и персональные подборки треков</p>
+          <div className="font-mono text-xs text-emerald-400 mb-1 flex items-center gap-1.5">
+            <span className="text-zinc-500">$</span>
+            <span>ls -la ~/playlists/</span>
+          </div>
+          <h2 className="text-xl font-bold text-zinc-100 tracking-tight font-mono">Мои плейлисты</h2>
+          <p className="text-xs text-zinc-400 mt-0.5">Коллекции и персональные подборки треков</p>
         </div>
         <button
           onClick={() => setIsCreating(!isCreating)}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-mono font-semibold rounded-xl transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
         >
           <Plus className="w-4 h-4" />
-          <span>Создать плейлист</span>
+          <span>$ mkdir --playlist</span>
         </button>
       </div>
 
@@ -191,19 +184,19 @@ export const PlaylistsView: React.FC = () => {
             placeholder="Название плейлиста..."
             value={newPlaylistName}
             onChange={(e) => setNewPlaylistName(e.target.value)}
-            className="flex-1 bg-zinc-950 border border-zinc-700/60 rounded-xl px-4 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500"
+            className="flex-1 bg-zinc-950 border border-zinc-700/60 rounded-xl px-4 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500 font-mono"
             autoFocus
           />
           <button
             type="submit"
-            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-semibold rounded-xl transition-colors cursor-pointer font-mono"
           >
             Сохранить
           </button>
           <button
             type="button"
             onClick={() => setIsCreating(false)}
-            className="px-4 py-2 text-zinc-400 hover:text-zinc-100 text-xs font-medium rounded-xl transition-colors cursor-pointer"
+            className="px-4 py-2 text-zinc-400 hover:text-zinc-100 text-xs font-medium rounded-xl transition-colors cursor-pointer font-mono"
           >
             Отмена
           </button>
@@ -211,44 +204,75 @@ export const PlaylistsView: React.FC = () => {
       )}
 
       {isLoading ? (
-        <div className="text-zinc-500 text-center py-12">Загрузка плейлистов...</div>
+        <div className="text-zinc-500 text-center py-12 font-mono text-xs">Загрузка плейлистов...</div>
       ) : playlists.length === 0 ? (
-        <div className="text-center py-16 text-zinc-500 border border-dashed border-zinc-800 rounded-2xl">
+        <div className="text-center py-16 text-zinc-500 border border-dashed border-zinc-800 rounded-2xl font-mono text-xs">
           <ListMusic className="w-12 h-12 mx-auto stroke-[1.5] text-zinc-600 mb-3" />
-          <p>У вас пока нет плейлистов. Создайте первый!</p>
+          <p>Каталог плейлистов пуст. Создайте первый плейлист командой выше.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {playlists.map((pl) => (
-            <div
-              key={pl.id}
-              onClick={() => openPlaylist(pl.id)}
-              className="p-5 bg-zinc-900/60 hover:bg-zinc-800/60 border border-zinc-800 hover:border-zinc-700/80 rounded-2xl transition-all cursor-pointer group flex flex-col justify-between"
-            >
-              <div className="flex items-start justify-between">
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                  <ListMusic className="w-6 h-6" />
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(pl.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-1.5 transition-opacity cursor-pointer"
-                  title="Удалить"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+          {playlists.map((pl) => {
+            const isFavorites = pl.name.toLowerCase() === 'избранное';
+            const count = isFavorites ? favoriteIds.size : pl.tracks_count;
 
-              <div>
-                <h3 className="font-semibold text-zinc-100 group-hover:text-emerald-400 transition-colors truncate">
-                  {pl.name}
-                </h3>
-                <p className="text-xs text-zinc-500 mt-1">{pl.tracks_count} треков</p>
+            return (
+              <div
+                key={pl.id}
+                onClick={() => openPlaylist(pl.id)}
+                className={`p-5 rounded-2xl transition-all cursor-pointer group flex flex-col justify-between border ${
+                  isFavorites
+                    ? 'bg-rose-500/5 hover:bg-rose-500/10 border-rose-500/30 hover:border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.08)]'
+                    : 'bg-zinc-900/60 hover:bg-zinc-800/60 border-zinc-800 hover:border-zinc-700/80'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 group-hover:scale-105 transition-transform ${
+                      isFavorites
+                        ? 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+                        : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                    }`}
+                  >
+                    {isFavorites ? <Heart className="w-6 h-6 fill-current" /> : <ListMusic className="w-6 h-6" />}
+                  </div>
+
+                  {!isFavorites && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(pl.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-1.5 transition-opacity cursor-pointer"
+                      title="Удалить"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <h3
+                    className={`font-semibold transition-colors truncate font-mono text-sm ${
+                      isFavorites ? 'text-rose-300 group-hover:text-rose-200' : 'text-zinc-100 group-hover:text-emerald-400'
+                    }`}
+                  >
+                    {pl.name}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-zinc-500 font-mono">
+                      {count} {count === 1 ? 'трек' : 'треков'}
+                    </span>
+                    {isFavorites && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-500/15 border border-rose-500/30 text-rose-400 font-mono">
+                        live
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -28,20 +28,21 @@ export const HistoryView: React.FC = () => {
 
   return (
     <div className="flex-1 overflow-y-auto px-8 py-6">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-zinc-100 tracking-tight flex items-center gap-3">
-          <History className="w-6 h-6 text-emerald-400" />
-          <span>История прослушиваний</span>
-        </h2>
-        <p className="text-xs text-zinc-400 mt-1">Недавно воспроизведенные композиции</p>
+      <div className="mb-8 pb-4 border-b border-zinc-800/80">
+        <div className="font-mono text-xs text-emerald-400 mb-1 flex items-center gap-1.5">
+          <span className="text-zinc-500">$</span>
+          <span>tail -n 50 -f ~/music/history.log</span>
+        </div>
+        <h2 className="text-xl font-bold text-zinc-100 tracking-tight font-mono">История прослушиваний</h2>
+        <p className="text-xs text-zinc-400 mt-0.5">Лог воспроизведений текущей сессии</p>
       </div>
 
       {isLoading ? (
-        <div className="text-zinc-500 text-center py-12">Загрузка истории...</div>
+        <div className="text-zinc-500 text-center py-12 font-mono text-xs">Чтение логов...</div>
       ) : history.length === 0 ? (
-        <div className="text-center py-16 text-zinc-500 border border-dashed border-zinc-800 rounded-2xl">
+        <div className="text-center py-16 text-zinc-500 border border-dashed border-zinc-800 rounded-2xl font-mono text-xs">
           <History className="w-12 h-12 mx-auto stroke-[1.5] text-zinc-600 mb-3" />
-          <p>История пуста. Включите любой трек, чтобы он появился здесь!</p>
+          <p>Лог пуст. Включите любой трек, чтобы появилась запись.</p>
         </div>
       ) : (
         <div className="divide-y divide-zinc-900/60">
@@ -49,18 +50,18 @@ export const HistoryView: React.FC = () => {
             const track = item.track;
             const isCurrent = currentTrack?.id === track.id;
             const isThisPlaying = isCurrent && isPlaying;
-            const dateStr = new Date(item.listened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateStr = new Date(item.listened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
             return (
               <div
                 key={item.id}
                 onClick={() => playTrack(track)}
-                className={`grid grid-cols-[48px_1fr_1fr_100px_80px] gap-4 px-4 py-3 items-center rounded-xl transition-colors cursor-pointer group ${
+                className={`grid grid-cols-[48px_1fr_1fr_110px_80px] gap-4 px-4 py-3 items-center rounded-xl transition-colors cursor-pointer group ${
                   isCurrent ? 'bg-zinc-800/80 text-emerald-400' : 'hover:bg-zinc-900/60 text-zinc-300 hover:text-zinc-100'
                 }`}
               >
-                <div className="flex items-center justify-center text-sm font-medium">
-                  <span className="group-hover:hidden text-zinc-500 text-xs">{idx + 1}</span>
+                <div className="flex items-center justify-center text-xs font-mono font-medium text-zinc-500">
+                  <span className="group-hover:hidden">{String(idx + 1).padStart(2, '0')}</span>
                   <button className="hidden group-hover:flex items-center justify-center text-zinc-100 hover:scale-110 transition-transform">
                     {isThisPlaying ? (
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />

@@ -10,6 +10,7 @@ export interface Track {
   cover_url?: string | null;
   waveform?: number[];
   stream_url?: string;
+  format?: string;
 }
 
 export const tracksApi = {
