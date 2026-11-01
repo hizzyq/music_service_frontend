@@ -35,6 +35,10 @@ export const TrackList: React.FC = () => {
 
     try {
       await adminApi.deleteTrack(trackId);
+      usePlayerStore.setState((prev) => ({
+        tracks: prev.tracks.filter((t) => t.id !== trackId),
+        queue: prev.queue.filter((t) => t.id !== trackId),
+      }));
       await fetchTracks();
     } catch (err: any) {
       alert(err.response?.data?.error || 'Не удалось удалить трек');
@@ -59,15 +63,15 @@ export const TrackList: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6">
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-800/80">
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6">
+      <div className="flex items-center justify-between mb-4 md:mb-6 pb-3 md:pb-4 border-b border-zinc-800/80">
         <div>
           <div className="font-mono text-xs text-emerald-400 mb-1 flex items-center gap-1.5">
             <span className="text-zinc-500">$</span>
             <span>ls -la ~/music/tracks/</span>
           </div>
-          <h2 className="text-xl font-bold text-zinc-100 tracking-tight font-mono">Каталог треков</h2>
-          <p className="text-xs text-zinc-400 mt-0.5">drwxr-xr-x 1 hizzyq audio • Хранилище MinIO S3</p>
+          <h2 className="text-lg md:text-xl font-bold text-zinc-100 tracking-tight font-mono">Каталог треков</h2>
+          <p className="text-[11px] md:text-xs text-zinc-400 mt-0.5">drwxr-xr-x 1 hizzyq audio • Хранилище MinIO S3</p>
         </div>
         <span className="text-xs text-emerald-400 font-mono px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
           total: {tracks.length} {tracks.length === 1 ? 'файл' : 'файлов'}
@@ -75,12 +79,12 @@ export const TrackList: React.FC = () => {
       </div>
 
       <div className="w-full">
-        {/* Шапка таблицы */}
-        <div className="grid grid-cols-[40px_1.5fr_1fr_120px_70px_80px] gap-4 px-4 py-2 border-b border-zinc-800 text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono">
+        {/* Шапка таблицы (скрыта на мобильных) */}
+        <div className="hidden md:grid grid-cols-[40px_1.5fr_1fr_120px_70px_80px] gap-4 px-4 py-2 border-b border-zinc-800 text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono">
           <span className="text-center">#</span>
           <span>Название</span>
           <span>Альбом</span>
-          <span className="hidden md:block">Волна</span>
+          <span>Волна</span>
           <span className="flex justify-end pr-2">
             <Clock className="w-4 h-4" />
           </span>
@@ -99,14 +103,14 @@ export const TrackList: React.FC = () => {
               <div
                 key={track.id}
                 onClick={() => playTrack(track)}
-                className={`grid grid-cols-[40px_1.5fr_1fr_120px_70px_80px] gap-4 px-4 py-3 items-center rounded-xl transition-colors cursor-pointer group ${
+                className={`flex items-center justify-between gap-3 px-3 py-2.5 md:grid md:grid-cols-[40px_1.5fr_1fr_120px_70px_80px] md:gap-4 md:px-4 md:py-3 rounded-xl transition-colors cursor-pointer group ${
                   isCurrent
                     ? 'bg-zinc-800/80 text-emerald-400'
                     : 'hover:bg-zinc-900/60 text-zinc-300 hover:text-zinc-100'
                 }`}
               >
                 {/* Номер / Кнопка Play */}
-                <div className="flex items-center justify-center text-xs font-mono font-medium text-zinc-500">
+                <div className="hidden md:flex items-center justify-center text-xs font-mono font-medium text-zinc-500">
                   <span className="group-hover:hidden">
                     {isThisPlaying ? (
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />

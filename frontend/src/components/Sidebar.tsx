@@ -1,9 +1,11 @@
 import React from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useFavoritesStore } from '../store/useFavoritesStore';
-import { Terminal, Radio, ListMusic, History, LogOut, ShieldAlert, UploadCloud, Cpu } from 'lucide-react';
+import { usePlayerStore } from '../store/usePlayerStore';
+import { useHistoryStore } from '../store/useHistoryStore';
+import { Terminal, Radio, ListMusic, History, LogOut, ShieldAlert, UploadCloud, Cpu, Sparkles } from 'lucide-react';
 
-export type ActiveView = 'tracks' | 'playlists' | 'history';
+export type ActiveView = 'tracks' | 'recommendations' | 'playlists' | 'history';
 
 interface SidebarProps {
   currentView: ActiveView;
@@ -14,9 +16,11 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, onOpenUpload }) => {
   const { logout, isAdmin } = useAuthStore();
   const favoriteCount = useFavoritesStore((state) => state.favoriteIds.size);
+  const tracksCount = usePlayerStore((state) => state.tracks.length);
+  const historyCount = useHistoryStore((state) => state.historyCount);
 
   return (
-    <aside className="w-64 bg-zinc-950/95 border-r border-zinc-800/80 flex flex-col justify-between p-4 shrink-0 font-sans">
+    <aside className="hidden md:flex w-64 bg-zinc-950/95 border-r border-zinc-800/80 flex-col justify-between p-4 shrink-0 font-sans">
       <div className="space-y-6">
         {/* Linux-терминал брендинг */}
         <div className="px-2 py-1.5 bg-zinc-900/60 border border-zinc-800/80 rounded-xl">
@@ -66,14 +70,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, onO
 
           <button
             onClick={() => onSelectView('tracks')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-mono transition-all cursor-pointer ${
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono transition-all cursor-pointer ${
               currentView === 'tracks'
                 ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold shadow-[0_0_12px_rgba(16,185,129,0.1)]'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
             }`}
           >
-            <Radio className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">~/tracks/ (Каталог)</span>
+            <div className="flex items-center gap-3 truncate">
+              <Radio className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">~/tracks/</span>
+            </div>
+            {tracksCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700/60 text-zinc-400 font-mono shrink-0">
+                {tracksCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => onSelectView('recommendations')}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-mono transition-all cursor-pointer ${
+              currentView === 'recommendations'
+                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold shadow-[0_0_12px_rgba(16,185,129,0.1)]'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+            <span className="truncate">~/recommendations/</span>
           </button>
 
           <button
@@ -97,14 +120,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, onO
 
           <button
             onClick={() => onSelectView('history')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-mono transition-all cursor-pointer ${
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono transition-all cursor-pointer ${
               currentView === 'history'
                 ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold shadow-[0_0_12px_rgba(16,185,129,0.1)]'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
             }`}
           >
-            <History className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">~/history.log</span>
+            <div className="flex items-center gap-3 truncate">
+              <History className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">~/history.log</span>
+            </div>
+            {historyCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700/60 text-zinc-400 font-mono shrink-0">
+                {historyCount}
+              </span>
+            )}
           </button>
 
           {/* Кнопка загрузки для администратора */}

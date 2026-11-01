@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { type Track, tracksApi } from '../api/tracks';
-import { historyApi } from '../api/history';
+import { useHistoryStore } from './useHistoryStore';
+import { setupMediaSession } from '../utils/mediaSession';
 
 interface PlayerState {
     tracks: Track[];
@@ -87,7 +88,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
                 audio.src = streamUrl;
                 await audio.play();
                 set({ isPlaying: true, isLoadingStream: false });
-                historyApi.record(track.id);
+                useHistoryStore.getState().recordListen(track);
+
+                setupMediaSession(track, {
+                    onPlay: () => get().togglePlay(),
+                    onPause: () => get().togglePlay(),
+                    onNext: () => get().playNext(),
+                    onPrev: () => get().playPrev(),
+                    onSeek: (time) => get().seek(time),
+                });
             } catch (err) {
                 console.error('Ошибка воспроизведения потока:', err);
                 set({ isPlaying: false, isLoadingStream: false });

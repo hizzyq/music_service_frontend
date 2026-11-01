@@ -8,6 +8,7 @@ interface PlaylistsState {
   createPlaylist: (name: string, description?: string) => Promise<PlaylistSummary>;
   deletePlaylist: (id: number) => Promise<void>;
   updateTrackCount: (name: string, delta: number) => void;
+  updateTrackCountById: (id: number, delta: number) => void;
 }
 
 export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
@@ -40,6 +41,16 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
     set({
       playlists: get().playlists.map((pl) =>
         pl.name.toLowerCase() === name.toLowerCase()
+          ? { ...pl, tracks_count: Math.max(0, pl.tracks_count + delta) }
+          : pl
+      ),
+    });
+  },
+
+  updateTrackCountById: (id: number, delta: number) => {
+    set({
+      playlists: get().playlists.map((pl) =>
+        pl.id === id
           ? { ...pl, tracks_count: Math.max(0, pl.tracks_count + delta) }
           : pl
       ),

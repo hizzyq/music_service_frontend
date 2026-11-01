@@ -57,7 +57,17 @@ export const PlaylistsView: React.FC = () => {
     if (!selectedPlaylist) return;
     try {
       await playlistsApi.removeTrack(selectedPlaylist.id, trackId);
-      openPlaylist(selectedPlaylist.id);
+      usePlaylistsStore.getState().updateTrackCountById(selectedPlaylist.id, -1);
+      setSelectedPlaylist({
+        ...selectedPlaylist,
+        tracks: selectedPlaylist.tracks.filter((t) => t.id !== trackId),
+      });
+
+      if (selectedPlaylist.name.toLowerCase() === 'избранное') {
+        const next = new Set(useFavoritesStore.getState().favoriteIds);
+        next.delete(trackId);
+        useFavoritesStore.setState({ favoriteIds: next });
+      }
     } catch (err) {
       console.error('Ошибка удаления трека из плейлиста:', err);
     }

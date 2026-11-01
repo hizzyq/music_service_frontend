@@ -1,39 +1,30 @@
-import React, { useEffect, useState } from 'react';
-import { historyApi, type HistoryItem } from '../api/history';
+import React, { useEffect } from 'react';
+import { useHistoryStore } from '../store/useHistoryStore';
 import { usePlayerStore } from '../store/usePlayerStore';
 import { History, Play, Disc3 } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 
 export const HistoryView: React.FC = () => {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
+  const { history, isLoading, loadHistory } = useHistoryStore();
   const { playTrack, currentTrack, isPlaying } = usePlayerStore();
-
-  const loadHistory = async () => {
-    setIsLoading(true);
-    try {
-      const data = await historyApi.getAll();
-      setHistory(data);
-    } catch (err) {
-      console.error('Ошибка загрузки истории:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [loadHistory]);
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6">
-      <div className="mb-8 pb-4 border-b border-zinc-800/80">
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6">
+      <div className="mb-6 md:mb-8 pb-3 md:pb-4 border-b border-zinc-800/80">
         <div className="font-mono text-xs text-emerald-400 mb-1 flex items-center gap-1.5">
           <span className="text-zinc-500">$</span>
           <span>tail -n 50 -f ~/music/history.log</span>
         </div>
-        <h2 className="text-xl font-bold text-zinc-100 tracking-tight font-mono">История прослушиваний</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg md:text-xl font-bold text-zinc-100 tracking-tight font-mono">История прослушиваний</h2>
+          <span className="text-xs font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
+            {history.length} {history.length === 1 ? 'запись' : 'записей'}
+          </span>
+        </div>
         <p className="text-xs text-zinc-400 mt-0.5">Лог воспроизведений текущей сессии</p>
       </div>
 
