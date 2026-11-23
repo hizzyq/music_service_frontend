@@ -3,6 +3,8 @@ import { type Track, tracksApi } from '../api/tracks';
 import { useHistoryStore } from './useHistoryStore';
 import { setupMediaSession } from '../utils/mediaSession';
 
+export type SleepTimerOption = '15' | '30' | '45' | '60' | 'end_of_track' | null;
+
 interface PlayerState {
     tracks: Track[];
     isTracksLoading: boolean;
@@ -14,6 +16,11 @@ interface PlayerState {
     queue: Track[];
     isLoadingStream: boolean;
 
+    // Таймер сна
+    sleepTimerOption: SleepTimerOption;
+    sleepTimerRemaining: number | null; // секунд осталось
+    isSleepTimerActive: boolean;
+
     fetchTracks: () => Promise<void>;
     setQueue: (tracks: Track[]) => void;
     playTrack: (track: Track) => Promise<void>;
@@ -22,6 +29,10 @@ interface PlayerState {
     setVolume: (volume: number) => void;
     playNext: () => void;
     playPrev: () => void;
+
+    // Управление таймером сна
+    setSleepTimer: (option: SleepTimerOption) => void;
+    cancelSleepTimer: () => void;
 }
 
 const savedVol = typeof window !== 'undefined' ? localStorage.getItem('music_player_volume') : null;
@@ -30,9 +41,25 @@ const initialVolume = savedVol !== null ? Math.min(1, Math.max(0, parseFloat(sav
 const audio = new Audio();
 audio.volume = initialVolume;
 
+let sleepTimerInterval: ReturnType<typeof setInterval> | null = null;
+const FADE_DURATION_SECONDS = 30; // Длительность плавного затухания звука (30 сек)
+const FADE_TRACK_END_SECONDS = 15; // Длительность затухания перед концом трека
+
 export const usePlayerStore = create<PlayerState>((set, get) => {
     audio.ontimeupdate = () => {
+        const { sleepTimerOption, volume } = get();
         set({ currentTime: audio.currentTime });
+
+        // Плавный Fade-out громкости для режима 'end_of_track'
+        if (sleepTimerOption === 'end_of_track' && audio.duration > 0) {
+            const remaining = audio.duration - audio.currentTime;
+            if (remaining <= FADE_TRACK_END_SECONDS && remaining >= 0) {
+                const factor = Math.max(0, remaining / FADE_TRACK_END_SECONDS);
+                audio.volume = volume * factor;
+            } else if (remaining > FADE_TRACK_END_SECONDS && audio.volume !== volume) {
+                audio.volume = volume;
+            }
+        }
     };
 
     audio.onloadedmetadata = () => {
@@ -40,7 +67,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     };
 
     audio.onended = () => {
-        get().playNext();
+        const { sleepTimerOption, cancelSleepTimer, playNext, volume } = get();
+        if (sleepTimerOption === 'end_of_track') {
+            audio.pause();
+            audio.volume = volume;
+            set({ isPlaying: false });
+            cancelSleepTimer();
+        } else {
+            playNext();
+        }
     };
 
     return {
@@ -53,6 +88,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         volume: initialVolume,
         queue: [],
         isLoadingStream: false,
+
+        sleepTimerOption: null,
+        sleepTimerRemaining: null,
+        isSleepTimerActive: false,
 
         fetchTracks: async () => {
             set({ isTracksLoading: true });
@@ -84,7 +123,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
             set({ currentTrack: track, isLoadingStream: true });
 
             try {
-                const streamUrl = await tracksApi.getStreamUrl(track.id); //
+                const streamUrl = await tracksApi.getStreamUrl(track.id);
                 audio.src = streamUrl;
                 await audio.play();
                 set({ isPlaying: true, isLoadingStream: false });
@@ -145,6 +184,70 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
             const currentIndex = queue.findIndex((t) => t.id === currentTrack.id);
             const prevIndex = (currentIndex - 1 + queue.length) % queue.length;
             playTrack(queue[prevIndex]);
+        },
+
+        setSleepTimer: (option) => {
+            if (sleepTimerInterval) {
+                clearInterval(sleepTimerInterval);
+                sleepTimerInterval = null;
+            }
+
+            if (!option) {
+                get().cancelSleepTimer();
+                return;
+            }
+
+            audio.volume = get().volume;
+
+            if (option === 'end_of_track') {
+                set({
+                    sleepTimerOption: 'end_of_track',
+                    sleepTimerRemaining: null,
+                    isSleepTimerActive: true,
+                });
+                return;
+            }
+
+            const minutes = parseInt(option, 10);
+            const totalSeconds = minutes * 60;
+
+            set({
+                sleepTimerOption: option,
+                sleepTimerRemaining: totalSeconds,
+                isSleepTimerActive: true,
+            });
+
+            sleepTimerInterval = setInterval(() => {
+                const { sleepTimerRemaining, volume, cancelSleepTimer } = get();
+                if (sleepTimerRemaining === null || sleepTimerRemaining <= 1) {
+                    audio.pause();
+                    audio.volume = volume;
+                    set({ isPlaying: false });
+                    cancelSleepTimer();
+                } else {
+                    const nextRemaining = sleepTimerRemaining - 1;
+                    if (nextRemaining <= FADE_DURATION_SECONDS) {
+                        const factor = Math.max(0, nextRemaining / FADE_DURATION_SECONDS);
+                        audio.volume = volume * factor;
+                    } else if (audio.volume !== volume) {
+                        audio.volume = volume;
+                    }
+                    set({ sleepTimerRemaining: nextRemaining });
+                }
+            }, 1000);
+        },
+
+        cancelSleepTimer: () => {
+            if (sleepTimerInterval) {
+                clearInterval(sleepTimerInterval);
+                sleepTimerInterval = null;
+            }
+            audio.volume = get().volume;
+            set({
+                sleepTimerOption: null,
+                sleepTimerRemaining: null,
+                isSleepTimerActive: false,
+            });
         },
     };
 });

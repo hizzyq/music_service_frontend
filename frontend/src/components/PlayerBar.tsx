@@ -3,6 +3,7 @@ import { usePlayerStore } from '../store/usePlayerStore';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, Heart } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
+import { SleepTimerControl } from './SleepTimerControl';
 
 export const PlayerBar: React.FC = () => {
   const {
@@ -92,7 +93,8 @@ export const PlayerBar: React.FC = () => {
       </div>
 
       {/* Мобильные кнопки управления прямо в мини-плеере */}
-      <div className="md:hidden flex items-center gap-2 shrink-0">
+      <div className="md:hidden flex items-center gap-1.5 shrink-0">
+        <SleepTimerControl isMobile={true} />
         <button
           onClick={togglePlay}
           disabled={isLoadingStream}
@@ -193,8 +195,10 @@ export const PlayerBar: React.FC = () => {
         </div>
       </div>
 
-      {/* Регулировка громкости (Desktop) */}
+      {/* Регулировка громкости и Таймер сна (Desktop) */}
       <div className="hidden md:flex items-center justify-end gap-3 text-zinc-400">
+        <SleepTimerControl />
+        <div className="h-4 w-px bg-zinc-800/80 mx-1" />
         <button
           onClick={() => setVolume(volume === 0 ? 1 : 0)}
           className="hover:text-zinc-100 transition-colors cursor-pointer"

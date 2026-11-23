@@ -63,4 +63,54 @@ describe('usePlayerStore', () => {
     usePlayerStore.getState().playPrev();
     expect(playSpy).toHaveBeenCalledWith(mockTrack1);
   });
+
+  describe('Sleep Timer (Таймер сна)', () => {
+    it('initializes with inactive sleep timer', () => {
+      expect(usePlayerStore.getState().isSleepTimerActive).toBe(false);
+      expect(usePlayerStore.getState().sleepTimerOption).toBeNull();
+      expect(usePlayerStore.getState().sleepTimerRemaining).toBeNull();
+    });
+
+    it('activates timed sleep timer with countdown in seconds', () => {
+      usePlayerStore.getState().setSleepTimer('15');
+      expect(usePlayerStore.getState().isSleepTimerActive).toBe(true);
+      expect(usePlayerStore.getState().sleepTimerOption).toBe('15');
+      expect(usePlayerStore.getState().sleepTimerRemaining).toBe(15 * 60);
+
+      usePlayerStore.getState().cancelSleepTimer();
+    });
+
+    it('activates end_of_track sleep timer mode', () => {
+      usePlayerStore.getState().setSleepTimer('end_of_track');
+      expect(usePlayerStore.getState().isSleepTimerActive).toBe(true);
+      expect(usePlayerStore.getState().sleepTimerOption).toBe('end_of_track');
+      expect(usePlayerStore.getState().sleepTimerRemaining).toBeNull();
+
+      usePlayerStore.getState().cancelSleepTimer();
+    });
+
+    it('cancels active sleep timer and resets state', () => {
+      usePlayerStore.getState().setSleepTimer('30');
+      expect(usePlayerStore.getState().isSleepTimerActive).toBe(true);
+
+      usePlayerStore.getState().cancelSleepTimer();
+      expect(usePlayerStore.getState().isSleepTimerActive).toBe(false);
+      expect(usePlayerStore.getState().sleepTimerOption).toBeNull();
+      expect(usePlayerStore.getState().sleepTimerRemaining).toBeNull();
+    });
+
+    it('ticks down and stops playback when timer expires', () => {
+      vi.useFakeTimers();
+      usePlayerStore.setState({ isPlaying: true, volume: 0.8 });
+      usePlayerStore.getState().setSleepTimer('15');
+
+      // Fast-forward 15 minutes (900 seconds)
+      vi.advanceTimersByTime(900 * 1000);
+
+      expect(usePlayerStore.getState().isPlaying).toBe(false);
+      expect(usePlayerStore.getState().isSleepTimerActive).toBe(false);
+      expect(usePlayerStore.getState().volume).toBe(0.8);
+      vi.useRealTimers();
+    });
+  });
 });
